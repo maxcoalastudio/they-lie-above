@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Banco de dados
+*.db
+
+# Arquivos de backup do Range Engine
+*.range1
+*.range.bak
+
+# Ambiente virtual
+venv/
+env/
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db 
