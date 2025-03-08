@@ -13,28 +13,33 @@ from dotenv import load_dotenv
 # Carregar variáveis de ambiente
 load_dotenv()
 
-# Configurar logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
 # Configurações
 PORT = int(os.getenv('PORT', 10000))
 HOST = '0.0.0.0'  # Necessário para o Render
+DATABASE_URL = os.getenv('DATABASE_URL', 'game.db')
+WEBSOCKET_MAX_SIZE = int(os.getenv('WEBSOCKET_MAX_SIZE', 10485760))  # 10MB default
+MAX_CONNECTIONS = int(os.getenv('MAX_CONNECTIONS', 1000))
+DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.DEBUG if DEBUG else logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Gerenciador de conexões
 class GameServer:
     def __init__(self):
         self.players = {}  # {websocket: player_data}
         self.connections = {}  # {player_id: websocket}
+        self.connection_count = 0
         self.init_db()
         logging.info("Servidor inicializado")
     
     def init_db(self):
         """Inicializar banco de dados"""
         try:
-            conn = sqlite3.connect('game.db')
+            conn = sqlite3.connect(DATABASE_URL)
             c = conn.cursor()
             c.execute('''
                 CREATE TABLE IF NOT EXISTS players (
@@ -54,7 +59,7 @@ class GameServer:
     def db_operation(self, operation):
         """Executar operação no banco de dados de forma segura"""
         try:
-            conn = sqlite3.connect('game.db')
+            conn = sqlite3.connect(DATABASE_URL)
             result = operation(conn)
             conn.close()
             return result
@@ -320,7 +325,13 @@ class GameServer:
 async def main():
     server = GameServer()
     print(f"Iniciando servidor em {HOST}:{PORT}")
-    async with websockets.serve(server.handle_connection, HOST, PORT):
+    async with websockets.serve(
+        server.handle_connection, 
+        HOST, 
+        PORT,
+        max_size=WEBSOCKET_MAX_SIZE,
+        max_queue=MAX_CONNECTIONS
+    ):
         await asyncio.Future()  # Executar indefinidamente
 
 if __name__ == "__main__":
