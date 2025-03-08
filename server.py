@@ -325,14 +325,26 @@ class GameServer:
 async def main():
     server = GameServer()
     print(f"Iniciando servidor em {HOST}:{PORT}")
+    
+    # Configuração do servidor WebSocket
     async with websockets.serve(
         server.handle_connection, 
         HOST, 
         PORT,
         max_size=WEBSOCKET_MAX_SIZE,
-        max_queue=MAX_CONNECTIONS
+        max_queue=MAX_CONNECTIONS,
+        ping_interval=20,
+        ping_timeout=60,
+        compression=None,  # Desabilitar compressão para melhor compatibilidade
+        logger=logging.getLogger('websockets')
     ):
+        print(f"Servidor WebSocket rodando em ws://{HOST}:{PORT}")
         await asyncio.Future()  # Executar indefinidamente
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nServidor encerrado pelo usuário")
+    except Exception as e:
+        print(f"Erro fatal no servidor: {e}") 

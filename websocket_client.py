@@ -16,7 +16,7 @@ class GameClient:
         self.max_reconnect_delay = 30.0
         self.timeout = 15  # Aumentado para 15 segundos
         self.login_response = None
-        self.server_url = "wss://they-lie-above.onrender.com/ws"  # URL do servidor no Render com path /ws
+        self.server_url = "wss://they-lie-above.onrender.com"  # URL do servidor no Render
         self.offline_mode = True  # Começar em modo offline
         self.players_data = {}  # Dados dos jogadores
         self.local_data_file = "player_data.json"
