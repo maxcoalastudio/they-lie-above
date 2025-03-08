@@ -67,65 +67,6 @@ class GameServer:
             logging.error(f"Erro na operação do banco: {e}")
             raise
     
-    async def register(self, websocket, data):
-        """Registrar novo jogador"""
-        email = data.get('email')
-        password = data.get('password')
-        
-        logging.info(f"Tentativa de registro: {email}")
-        
-        try:
-            def register_op(conn):
-                c = conn.cursor()
-                player_id = f"player_{int(time.time()*1000)}"
-                
-                c.execute(
-                    'INSERT INTO players (id, email, password, stats) VALUES (?, ?, ?, ?)',
-                    (player_id, email, password, json.dumps({
-                        "score": 0,
-                        "kills": 0,
-                        "deaths": 0
-                    }))
-                )
-                conn.commit()
-                return player_id
-                
-            player_id = self.db_operation(register_op)
-            
-            # Adicionar jogador à lista de conectados
-            self.players[websocket] = {
-                'id': player_id,
-                'email': email,
-                'position': [0, 0, 0],
-                'rotation': [0, 0, 0],
-                'last_update': time.time()
-            }
-            
-            # Registrar conexão
-            self.connections[player_id] = websocket
-            
-            response = {
-                'type': 'login_response',
-                'success': True,
-                'player_id': player_id,
-                'email': email
-            }
-            
-            await websocket.send(json.dumps(response))
-            logging.info(f"Registro bem sucedido: {email} (ID: {player_id})")
-            
-            # Notificar outros jogadores
-            await self.broadcast_player_joined(player_id)
-            
-        except Exception as e:
-            error_msg = f"Erro no registro: {str(e)}"
-            logging.error(error_msg)
-            await websocket.send(json.dumps({
-                'type': 'login_response',
-                'success': False,
-                'error': error_msg
-            }))
-    
     async def login(self, websocket, data):
         """Login de jogador"""
         email = data.get('email')
@@ -142,10 +83,61 @@ class GameServer:
             result = self.db_operation(login_op)
             
             if not result:
-                logging.info(f"Usuário não encontrado, tentando registrar: {email}")
-                await self.register(websocket, data)
-                return
+                logging.info(f"Usuário não encontrado, registrando novo usuário: {email}")
+                # Criar novo jogador
+                player_id = f"player_{int(time.time()*1000)}"
                 
+                def register_new(conn):
+                    c = conn.cursor()
+                    c.execute(
+                        'INSERT INTO players (id, email, password, stats) VALUES (?, ?, ?, ?)',
+                        (player_id, email, password, json.dumps({
+                            "score": 0,
+                            "kills": 0,
+                            "deaths": 0
+                        }))
+                    )
+                    conn.commit()
+                
+                try:
+                    self.db_operation(register_new)
+                    
+                    # Adicionar jogador à lista de conectados
+                    self.players[websocket] = {
+                        'id': player_id,
+                        'email': email,
+                        'position': [0, 0, 0],
+                        'rotation': [0, 0, 0],
+                        'last_update': time.time()
+                    }
+                    
+                    # Registrar conexão
+                    self.connections[player_id] = websocket
+                    
+                    response = {
+                        'type': 'login_response',
+                        'success': True,
+                        'player_id': player_id,
+                        'email': email
+                    }
+                    
+                    await websocket.send(json.dumps(response))
+                    logging.info(f"Novo usuário registrado e logado: {email} (ID: {player_id})")
+                    
+                    # Notificar outros jogadores
+                    await self.broadcast_player_joined(player_id)
+                    return
+                    
+                except Exception as e:
+                    error_msg = f"Erro ao registrar novo usuário: {str(e)}"
+                    logging.error(error_msg)
+                    await websocket.send(json.dumps({
+                        'type': 'login_response',
+                        'success': False,
+                        'error': error_msg
+                    }))
+                    return
+            
             player_id, stored_password = result
             
             if password == stored_password:
