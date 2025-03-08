@@ -126,14 +126,22 @@ class GameServer:
             
             # Enviar resposta única
             if success and player_id:
+                # Remover qualquer conexão antiga do mesmo jogador
+                if player_id in self.connections:
+                    old_websocket = self.connections[player_id]
+                    if old_websocket in self.players:
+                        del self.players[old_websocket]
+                    del self.connections[player_id]
+                
                 # Configurar jogador
-                self.players[websocket] = {
+                player_data = {
                     'id': player_id,
                     'email': email,
                     'position': [0, 0, 0],
                     'rotation': [0, 0, 0],
                     'last_update': time.time()
                 }
+                self.players[websocket] = player_data
                 self.connections[player_id] = websocket
                 
                 # Enviar resposta de sucesso
@@ -146,7 +154,11 @@ class GameServer:
                 await websocket.send(json.dumps(response))
                 
                 # Notificar outros jogadores
-                await self.broadcast_player_joined(player_id)
+                try:
+                    await self.broadcast_player_joined(player_id)
+                except Exception as e:
+                    logging.error(f"Erro ao notificar outros jogadores: {e}")
+                
             else:
                 # Enviar resposta de erro
                 await websocket.send(json.dumps({
@@ -201,10 +213,17 @@ class GameServer:
         
     async def broadcast_player_joined(self, player_id):
         """Notificar todos sobre novo jogador"""
+        # Encontrar o websocket correto para o player_id
+        websocket = self.connections.get(player_id)
+        if not websocket or websocket not in self.players:
+            logging.error(f"Erro ao notificar sobre novo jogador: websocket não encontrado para {player_id}")
+            return
+            
+        player_data = self.players[websocket].copy()  # Fazer uma cópia para evitar referência circular
         message = {
             'type': 'player_joined',
             'player_id': player_id,
-            'data': self.players[player_id]
+            'data': player_data
         }
         await self.broadcast(message, exclude=player_id)
         
