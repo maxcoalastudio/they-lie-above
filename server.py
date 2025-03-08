@@ -75,73 +75,58 @@ class GameServer:
         logging.info(f"Tentativa de login: {email}")
         
         try:
-            def login_op(conn):
+            # Verificar se o email já existe
+            def check_user(conn):
                 c = conn.cursor()
                 c.execute('SELECT id, password FROM players WHERE email = ?', (email,))
                 return c.fetchone()
-                
-            result = self.db_operation(login_op)
             
-            if not result:
-                logging.info(f"Usuário não encontrado, registrando novo usuário: {email}")
-                # Criar novo jogador
-                player_id = f"player_{int(time.time()*1000)}"
-                
-                def register_new(conn):
-                    c = conn.cursor()
-                    c.execute(
-                        'INSERT INTO players (id, email, password, stats) VALUES (?, ?, ?, ?)',
-                        (player_id, email, password, json.dumps({
-                            "score": 0,
-                            "kills": 0,
-                            "deaths": 0
-                        }))
-                    )
-                    conn.commit()
-                
+            existing_user = self.db_operation(check_user)
+            
+            # Variáveis para resposta
+            success = False
+            player_id = None
+            error_msg = None
+            
+            if not existing_user:
+                # Criar novo usuário
                 try:
-                    self.db_operation(register_new)
+                    player_id = f"player_{int(time.time()*1000)}"
                     
-                    # Adicionar jogador à lista de conectados
-                    self.players[websocket] = {
-                        'id': player_id,
-                        'email': email,
-                        'position': [0, 0, 0],
-                        'rotation': [0, 0, 0],
-                        'last_update': time.time()
-                    }
+                    def create_user(conn):
+                        c = conn.cursor()
+                        c.execute(
+                            'INSERT INTO players (id, email, password, stats) VALUES (?, ?, ?, ?)',
+                            (player_id, email, password, json.dumps({
+                                "score": 0,
+                                "kills": 0,
+                                "deaths": 0
+                            }))
+                        )
+                        conn.commit()
                     
-                    # Registrar conexão
-                    self.connections[player_id] = websocket
-                    
-                    response = {
-                        'type': 'login_response',
-                        'success': True,
-                        'player_id': player_id,
-                        'email': email
-                    }
-                    
-                    await websocket.send(json.dumps(response))
-                    logging.info(f"Novo usuário registrado e logado: {email} (ID: {player_id})")
-                    
-                    # Notificar outros jogadores
-                    await self.broadcast_player_joined(player_id)
-                    return
+                    self.db_operation(create_user)
+                    success = True
+                    logging.info(f"Novo usuário criado: {email} (ID: {player_id})")
                     
                 except Exception as e:
-                    error_msg = f"Erro ao registrar novo usuário: {str(e)}"
+                    error_msg = f"Erro ao criar usuário: {str(e)}"
                     logging.error(error_msg)
-                    await websocket.send(json.dumps({
-                        'type': 'login_response',
-                        'success': False,
-                        'error': error_msg
-                    }))
-                    return
+            else:
+                # Verificar senha do usuário existente
+                stored_id, stored_password = existing_user
+                
+                if password == stored_password:
+                    player_id = stored_id
+                    success = True
+                    logging.info(f"Login bem sucedido: {email} (ID: {player_id})")
+                else:
+                    error_msg = "Senha incorreta"
+                    logging.warning(f"Tentativa de login com senha incorreta: {email}")
             
-            player_id, stored_password = result
-            
-            if password == stored_password:
-                # Adicionar jogador à lista de conectados
+            # Enviar resposta única
+            if success and player_id:
+                # Configurar jogador
                 self.players[websocket] = {
                     'id': player_id,
                     'email': email,
@@ -149,34 +134,29 @@ class GameServer:
                     'rotation': [0, 0, 0],
                     'last_update': time.time()
                 }
-                
-                # Registrar conexão
                 self.connections[player_id] = websocket
                 
+                # Enviar resposta de sucesso
                 response = {
                     'type': 'login_response',
                     'success': True,
                     'player_id': player_id,
                     'email': email
                 }
-                
                 await websocket.send(json.dumps(response))
-                logging.info(f"Login bem sucedido: {email} (ID: {player_id})")
                 
                 # Notificar outros jogadores
                 await self.broadcast_player_joined(player_id)
-                
             else:
-                error_msg = "Senha incorreta"
-                logging.warning(f"Tentativa de login com senha incorreta: {email}")
+                # Enviar resposta de erro
                 await websocket.send(json.dumps({
                     'type': 'login_response',
                     'success': False,
-                    'error': error_msg
+                    'error': error_msg or "Erro desconhecido no login"
                 }))
                 
         except Exception as e:
-            error_msg = f"Erro no login: {str(e)}"
+            error_msg = f"Erro no sistema de login: {str(e)}"
             logging.error(error_msg)
             await websocket.send(json.dumps({
                 'type': 'login_response',
