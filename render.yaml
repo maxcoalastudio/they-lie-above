@@ -2,8 +2,15 @@ services:
   - type: web
     name: they-lie-above
     env: python
+    region: oregon  # Escolha a região mais próxima
     buildCommand: pip install -r requirements.txt
-    startCommand: python server.py
+    startCommand: python websocket_server.py
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
       - key: PORT
-        value: 10000 
+        value: 10000
+      - key: PYTHONUNBUFFERED
+        value: true
+    healthCheckPath: /
+    plan: free 
